@@ -8,8 +8,7 @@
 
 - 📥 **Download videos** in MP4, MP3, or custom resolutions  
 - ⚡ **Fast and smooth** download speeds  
-- 🔗 **Support** for single videos, playlists, and entire channels  
-- 🌓 **Lightweight design** with dark mode option  
+- 🔗 **Support** for single videos, playlists, and entire channels   
 - 🛡️ **No ads**, no bloat — just pure downloading  
 
 ---

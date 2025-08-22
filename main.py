@@ -1,16 +1,30 @@
-from flask import Flask, request, jsonify, send_file, session
+from flask import Flask, request, jsonify, send_file, session, make_response
+from flask_limiter import Limiter
+from flask_limiter.util import get_remote_address
+import time
 import uuid
 import os
 import yt_dlp
 import shutil
-from functools import wraps
+
+
 from werkzeug.security import generate_password_hash, check_password_hash
 from dotenv import load_dotenv
-import query
 
+
+import query
+from middleware import login_required
+from utils import build_format_string, format_time
 
 load_dotenv()
 app = Flask(__name__)
+
+limiter = Limiter(
+    get_remote_address,
+    app=app,
+    default_limits=["200 per day", "50 per hour"],
+    headers_enabled=True
+)
 
 app.secret_key = os.getenv("SECRET_KEY", "my_secure_secret_key")
 DOWNLOAD_DIR = os.getenv("DOWNLOAD_DIR", "downloads")
@@ -23,19 +37,17 @@ os.makedirs(DOWNLOAD_DIR, exist_ok=True)
 
 query.init_db()
 
-def login_required(f):
-    @wraps(f)
-    def decorated_function(*args, **kwargs):
-        if 'email' not in session:
-            return jsonify({"error": "Authentication required. Kindly login or register!"}), 401
-        return f(args, kwargs)
-    return decorated_function
+@app.errorhandler(429)
+def ratelimit_handler(e):
+    return make_response(
+            jsonify(error=f"ratelimit exceeded {e.description}")
+            , 429
+    )
 
-def build_format_string(resolution=None):
-    if resolution:
-        return f"bestvideo[height<={resolution}]+bestaudio/best[height<={resolution}]/best"
-    return "bestvideo+bestaudio/best"
-
+@app.route("/test", methods=["GET", "POST"])
+@limiter.limit("5 per minute")
+def test_limiter():
+    return jsonify({"message": "Testing limiter"})
 
 @app.route("/register", methods=["POST"])
 def register():
@@ -49,6 +61,7 @@ def register():
     hashed_password = generate_password_hash(password)
 
     if query.add_user(email, hashed_password):
+        session['email'] = email
         return jsonify({"message": "User successfully created"}), 201
     else:
         return jsonify({"error": "User creation failed: user already exists"}), 409
@@ -64,19 +77,21 @@ def login():
     
     stored_password = query.get_user_password(email)
     if stored_password and check_password_hash(stored_password, password):
+        session['email'] = email
         return jsonify({"message": "User login successful"}), 200
     
     return jsonify({"error": "Invalid credentials!"}), 401
 
 @app.route("/logout", methods=["POST"])
 @login_required
-def logout():
+def logout(*args, **kwargs):
     session.pop("email", None)
     return jsonify({"message": "User logout successful"}), 200
 
 @app.route("/download", methods=["POST"])
 @login_required
-def download():
+@limiter.limit("5 per hour")
+def download(*args, **kwargs):
     data = request.get_json()
     url = data.get("url")
     resolution = data.get("resolution")

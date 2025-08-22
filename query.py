@@ -27,7 +27,7 @@ def add_user(email, hashed_password):
     
 def get_user_password(email):
     with sqlite3.connect(DB_PATH) as conn:
-        cursor = conn.execute("SELECT password FROM users WHERE email = ?", (email))
+        cursor = conn.execute("SELECT password FROM users WHERE email = ?", (email,))
         user = cursor.fetchone()
         if user:
             return user[0]
